@@ -8,225 +8,234 @@
 #include "bn_sprite_items_platform.h"
 #include "bn_sprite_items_bomb.h"
 #include "bn_sprite_items_apple.h"
+#include "bn_regular_bg_items_background.h"
+#include "bn_regular_bg_items_mainscreen.h"
 #include "common_variable_8x16_sprite_font.h"
-#include "bn_random.h" // Include Butano random header
-#include "bn_string.h" // For string conversions
+#include "bn_random.h" 
+#include "bn_string.h" 
+#include "bn_regular_bg_ptr.h"
 
-// Enum for managing game states
+// game states enum
 enum class GameState
 {
-    MAIN_MENU,
-    GAME_SCREEN,
-    GAME_OVER
+    mainMenu,
+    gameScreen,
+    gameOver
 };
 
-// Constants
+// constants
 constexpr int gravity = 1;
-constexpr int jump_strength = -10;
-constexpr int platform_spacing = 32;
-constexpr int screen_bottom = 72;
-constexpr int screen_top = -72;
-constexpr int move_speed = 2;
-constexpr int platform_margin = 20;
+constexpr int jumpStrength = -10;
+constexpr int platformSpacing = 32;
+constexpr int screenBottom = 72;
+constexpr int screenTop = -72;
+constexpr int moveSpeed = 2;
+constexpr int platformMargin = 20;
 
-// Function to handle the Main Menu screen
-void main_menu_screen(bn::sprite_text_generator& text_generator)
+// handles the main menu screen, pretty straightforward
+void mainMenuScreen(bn::sprite_text_generator& textGenerator)
 {
-    bn::vector<bn::sprite_ptr, 32> text_sprites;
-    text_generator.generate(0, 0, "Main Menu", text_sprites);
-    text_generator.generate(0, 32, "Press START", text_sprites);
+    auto mainMenuBg = bn::regular_bg_items::mainscreen.create_bg(0, 0);
+    bn::vector<bn::sprite_ptr, 32> textSprites;
+    textGenerator.generate(0, 0, "main menu", textSprites);
+    textGenerator.generate(0, 32, "press start", textSprites);
 
-    // Wait for the user to press START
+    // waiting for that start button press
     while(!bn::keypad::start_pressed())
     {
         bn::core::update();
     }
 }
 
-// Function to handle the Game Over screen
-void game_over_screen(bn::sprite_text_generator& text_generator, int score)
+// game over screen handler, super dramatic
+void gameOverScreen(bn::sprite_text_generator& textGenerator, int score)
 {
-    bn::vector<bn::sprite_ptr, 32> text_sprites;
-    text_generator.generate(0, 0, "Game Over", text_sprites);
+    bn::vector<bn::sprite_ptr, 32> textSprites;
+    textGenerator.generate(0, 0, "game over", textSprites);
 
-    // Safely construct the "Apples" string
-    bn::string<16> apples_text = "Apples: ";
-    apples_text.append(bn::to_string<8>(score));
-    text_generator.generate(0, 32, apples_text, text_sprites);
+    // slap that score onto the screen
+    bn::string<16> applesText = "apples: ";
+    applesText.append(bn::to_string<8>(score));
+    textGenerator.generate(0, 32, applesText, textSprites);
 
-    text_generator.generate(0, 64, "Play again?", text_sprites);
+    textGenerator.generate(0, 64, "play again?", textSprites);
 
-    // Highlight "Play again?" text
-    for(auto& sprite : text_sprites)
+    // highlight "play again?" 
+    // still cant get it to work
+    for(auto& sprite : textSprites)
     {
         if(sprite.position().y() == 64)
         {
-            sprite.set_blending_enabled(true); // Add visual emphasis instead of a red palette
+            sprite.set_blending_enabled(true); // vibey highlight
         }
     }
 
-    // Wait for the user to press START
+    // wait for another start press
     while(!bn::keypad::start_pressed())
     {
         bn::core::update();
     }
 }
 
-// Function to handle the Game Screen
-void game_screen(bn::sprite_text_generator& text_generator, int& score)
+// handles the game screen aka the main event
+void gameScreen(bn::sprite_text_generator& textGenerator, int& score)
 {
-    // Player sprite
-    bn::sprite_ptr pounce_sprite = bn::sprite_items::pounce.create_sprite(0, screen_bottom - 16);
-    int velocity_y = 0; // Initial velocity
-    bool on_platform = false;
+    auto background = bn::regular_bg_items::background.create_bg(0, 0);
 
-    // Platforms
+    // player sprite setup
+    bn::sprite_ptr pounceSprite = bn::sprite_items::pounce.create_sprite(0, screenBottom - 16);
+    int velocityY = 0; // no initial movement
+    bool onPlatform = false;
+
+    // spawn platforms
     bn::vector<bn::sprite_ptr, 10> platforms;
-    bn::random random_generator;
+    bn::random randomGenerator;
     for(int i = 0; i < 10; ++i)
     {
-        int x = (i == 0) ? 0 : random_generator.get_int(platform_margin, 96 - platform_margin) * (random_generator.get_int() % 2 == 0 ? -1 : 1);
-        int y = screen_bottom - (i * platform_spacing);
+        int x = (i == 0) ? 0 : randomGenerator.get_int(platformMargin, 96 - platformMargin) * (randomGenerator.get_int() % 2 == 0 ? -1 : 1);
+        int y = screenBottom - (i * platformSpacing);
         platforms.push_back(bn::sprite_items::platform.create_sprite(x, y));
     }
 
-    // Ensure pounce starts on the center platform
-    pounce_sprite.set_y(platforms.front().y() - 12);
+    // make sure pounce starts on a platform
+    pounceSprite.set_y(platforms.front().y() - 12);
 
-    // Bomb and apple spawn setup
+    // bomb and apple setup
     bn::optional<bn::sprite_ptr> bomb;
     bn::optional<bn::sprite_ptr> apple;
 
-    auto spawn_item = [&](bn::optional<bn::sprite_ptr>& item, const bn::sprite_item& sprite_item) {
-        int platform_index = random_generator.get_int(1, platforms.size() - 1);
-        int x = int(platforms[platform_index].x());
-        int y = int(platforms[platform_index].y()) - 16;
-        item = sprite_item.create_sprite(x, y);
+    auto spawnItem = [&](bn::optional<bn::sprite_ptr>& item, const bn::sprite_item& spriteItem) {
+        int platformIndex = randomGenerator.get_int(1, platforms.size() - 1);
+        int x = int(platforms[platformIndex].x());
+        int y = int(platforms[platformIndex].y()) - 16;
+        item = spriteItem.create_sprite(x, y);
     };
 
-    // Spawn initial bomb and apple
-    spawn_item(bomb, bn::sprite_items::bomb);
-    spawn_item(apple, bn::sprite_items::apple);
+    // spawn the initial bomb and apple
+    spawnItem(bomb, bn::sprite_items::bomb);
+    spawnItem(apple, bn::sprite_items::apple);
 
-    // Game loop
+    // game loop, keep it running
     while(true)
     {
-        on_platform = false;
+        onPlatform = false;
 
-        // Handle left and right movement
+        // handle movement, left and right
         if(bn::keypad::left_held())
         {
-            pounce_sprite.set_x(pounce_sprite.x() - move_speed);
+            pounceSprite.set_x(pounceSprite.x() - moveSpeed);
         }
         if(bn::keypad::right_held())
         {
-            pounce_sprite.set_x(pounce_sprite.x() + move_speed);
+            pounceSprite.set_x(pounceSprite.x() + moveSpeed);
         }
 
-        // Check for collision with platforms
+        // collision check with platforms
         for(auto& platform : platforms)
         {
-            if(pounce_sprite.y() + 8 >= platform.y() - 8 && pounce_sprite.y() <= platform.y() &&
-               pounce_sprite.x() + 8 >= platform.x() - 16 && pounce_sprite.x() <= platform.x() + 16)
+            if(pounceSprite.y() + 8 >= platform.y() - 8 && pounceSprite.y() <= platform.y() &&
+               pounceSprite.x() + 8 >= platform.x() - 16 && pounceSprite.x() <= platform.x() + 16)
             {
-                on_platform = true;
-                pounce_sprite.set_y(platform.y() - 12); // Align pounce on top of the platform
+                onPlatform = true;
+                pounceSprite.set_y(platform.y() - 12); // align with platform
                 break;
             }
         }
 
-        // Handle jumping
+        // jumping mechanic
         if(bn::keypad::up_pressed())
         {
-            velocity_y = jump_strength;
-            on_platform = false; // Leave platform when jumping
+            velocityY = jumpStrength;
+            onPlatform = false; // jump off platform
         }
 
-        // Apply gravity if not on a platform
-        if(!on_platform)
+        // apply gravity when airborne
+        if(!onPlatform)
         {
-            velocity_y += gravity;
+            velocityY += gravity;
         }
 
-        // Update pounce position based on velocity
-        pounce_sprite.set_y(pounce_sprite.y() + velocity_y);
+        // update position
+        pounceSprite.set_y(pounceSprite.y() + velocityY);
 
-        // Check for collision with bomb
-        if(bomb && pounce_sprite.y() + 8 >= bomb->y() - 8 && pounce_sprite.y() <= bomb->y() + 8 &&
-           pounce_sprite.x() + 8 >= bomb->x() - 8 && pounce_sprite.x() <= bomb->x() + 8)
+        // scroll bg upwards
+        if(pounceSprite.y() < screenTop)
         {
-            return; // End the game
-        }
-
-        // Check for collision with apple
-        if(apple && pounce_sprite.y() + 8 >= apple->y() - 8 && pounce_sprite.y() <= apple->y() + 8 &&
-           pounce_sprite.x() + 8 >= apple->x() - 8 && pounce_sprite.x() <= apple->x() + 8)
-        {
-            apple->set_visible(false); // Collect the apple
-            apple.reset(); // Remove apple from screen
-            ++score; // Increase score
-        }
-
-        // Respawn bomb if it goes off-screen
-        if(bomb && bomb->y() > screen_bottom)
-        {
-            bomb.reset();
-            spawn_item(bomb, bn::sprite_items::bomb);
-        }
-
-        // Respawn apple if it goes off-screen or collected
-        if(!apple)
-        {
-            spawn_item(apple, bn::sprite_items::apple);
-        }
-
-        // Check if the player falls off the screen
-        if(pounce_sprite.y() > screen_bottom)
-        {
-            return; // End the game
-        }
-
-        // Scroll platforms if player moves up
-        if(pounce_sprite.y() < screen_top)
-        {
-            int delta_y = int(screen_top) - int(pounce_sprite.y().right_shift_integer());
-            pounce_sprite.set_y(screen_top);
+            int deltaY = int(screenTop) - int(pounceSprite.y().right_shift_integer());
+            pounceSprite.set_y(screenTop);
+            //DONT DELETE THIS (idk why it works)
+            background.set_y(background.y() + deltaY);
 
             for(auto& platform : platforms)
             {
-                platform.set_y(platform.y() + delta_y);
+                platform.set_y(platform.y() + deltaY);
 
-                // Respawn platform if it goes off-screen
-                if(platform.y() > screen_bottom)
+                // respawn platform if it scrolls off
+                if(platform.y() > screenBottom)
                 {
-                    int x = random_generator.get_int(platform_margin, 96 - platform_margin) * (random_generator.get_int() % 2 == 0 ? -1 : 1);
-                    platform.set_y(screen_top);
+                    int x = randomGenerator.get_int(platformMargin, 96 - platformMargin) * (randomGenerator.get_int() % 2 == 0 ? -1 : 1);
+                    platform.set_y(screenTop);
                     platform.set_x(x);
                 }
             }
 
-            // Scroll bomb and apple
+            // scroll bomb and apple
             if(bomb)
             {
-                bomb->set_y(bomb->y() + delta_y);
+                bomb->set_y(bomb->y() + deltaY);
 
-                if(bomb->y() > screen_bottom)
+                if(bomb->y() > screenBottom)
                 {
                     bomb.reset();
-                    spawn_item(bomb, bn::sprite_items::bomb);
+                    spawnItem(bomb, bn::sprite_items::bomb);
                 }
             }
 
             if(apple)
             {
-                apple->set_y(apple->y() + delta_y);
+                apple->set_y(apple->y() + deltaY);
 
-                if(apple->y() > screen_bottom)
+                if(apple->y() > screenBottom)
                 {
                     apple.reset();
-                    spawn_item(apple, bn::sprite_items::apple);
+                    spawnItem(apple, bn::sprite_items::apple);
                 }
             }
+        }
+
+        // bomb collision
+        if(bomb && pounceSprite.y() + 8 >= bomb->y() - 8 && pounceSprite.y() <= bomb->y() + 8 &&
+           pounceSprite.x() + 8 >= bomb->x() - 8 && pounceSprite.x() <= bomb->x() + 8)
+        {
+            return; // end game, rip
+        }
+
+        // apple collision
+        if(apple && pounceSprite.y() + 8 >= apple->y() - 8 && pounceSprite.y() <= apple->y() + 8 &&
+           pounceSprite.x() + 8 >= apple->x() - 8 && pounceSprite.x() <= apple->x() + 8)
+        {
+            apple->set_visible(false); // munch munch
+            apple.reset(); // bye apple
+            ++score; // add points
+        }
+
+        // respawn bomb
+        if(bomb && bomb->y() > screenBottom)
+        {
+            bomb.reset();
+            spawnItem(bomb, bn::sprite_items::bomb);
+        }
+
+        // respawn apple
+        if(!apple)
+        {
+            spawnItem(apple, bn::sprite_items::apple);
+        }
+
+        // player falls off the screen
+        if(pounceSprite.y() > screenBottom)
+        {
+            return; // gg
         }
 
         bn::core::update();
@@ -238,31 +247,31 @@ int main()
     bn::core::init();
     bn::bg_palettes::set_transparent_color(bn::color(16, 16, 16));
 
-    // Initialize the text generator
-    bn::sprite_text_generator text_generator(common::variable_8x16_sprite_font);
-    text_generator.set_center_alignment();
+    // init text generator
+    bn::sprite_text_generator textGenerator(common::variable_8x16_sprite_font);
+    textGenerator.set_center_alignment();
 
-    // State management loop
-    GameState state = GameState::MAIN_MENU;
+    // actual game
+    GameState state = GameState::mainMenu;
     int score = 0;
 
     while(true)
     {
-        if(state == GameState::MAIN_MENU)
+        if(state == GameState::mainMenu)
         {
-            main_menu_screen(text_generator);
-            state = GameState::GAME_SCREEN;
+            mainMenuScreen(textGenerator);
+            state = GameState::gameScreen;
         }
-        else if(state == GameState::GAME_SCREEN)
+        else if(state == GameState::gameScreen)
         {
-            game_screen(text_generator, score);
-            state = GameState::GAME_OVER;
+            gameScreen(textGenerator, score);
+            state = GameState::gameOver;
         }
-        else if(state == GameState::GAME_OVER)
+        else if(state == GameState::gameOver)
         {
-            game_over_screen(text_generator, score);
-            score = 0; // Reset score for the next game
-            state = GameState::MAIN_MENU;
+            gameOverScreen(textGenerator, score);
+            score = 0; // reset score
+            state = GameState::mainMenu;
         }
     }
 }
